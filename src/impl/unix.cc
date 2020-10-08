@@ -15,6 +15,13 @@
 #include <errno.h>
 #include <paths.h>
 #include <sysexits.h>
+#define termios asmtermios
+#define termio asmtermio
+#define winsize asmwinsize
+#include <asm/termios.h>
+#undef  termios
+#undef  termio
+#undef  winsize
 #include <termios.h>
 #include <sys/param.h>
 #include <pthread.h>
@@ -26,6 +33,8 @@
 #include <sys/select.h>
 #include <sys/time.h>
 #include <time.h>
+#include <asm/termbits.h>
+
 #ifdef __MACH__
 #include <AvailabilityMacros.h>
 #include <mach/clock.h>
@@ -316,8 +325,27 @@ Serial::SerialImpl::reconfigurePort ()
     }
     // Linux Support
 #elif defined(__linux__) && defined (TIOCSSERIAL)
-    struct serial_struct ser;
+    speed_t new_baud = static_cast<speed_t> (baudrate_);
 
+    struct termios2 tio;
+
+    if (-1 == ioctl (fd_, TCGETS2, &tio)) {
+        THROW (IOException, errno);
+    }
+
+    tio.c_cflag &= ~CBAUD;
+    tio.c_cflag |= BOTHER;
+    tio.c_ispeed = baud;
+    tio.c_ospeed = baud;
+
+    if (ioctl(fd_, TCSETS2, &tio) < 0){
+        THROW (IOException, errno);
+    }
+
+    if (ioctl(fd_, TCGETS2, &tio) < 0){
+        THROW (IOException, errno);
+    }
+/*
     if (-1 == ioctl (fd_, TIOCGSERIAL, &ser)) {
       THROW (IOException, errno);
     }
@@ -331,6 +359,7 @@ Serial::SerialImpl::reconfigurePort ()
     if (-1 == ioctl (fd_, TIOCSSERIAL, &ser)) {
       THROW (IOException, errno);
     }
+*/
 #else
     throw invalid_argument ("OS does not currently support custom bauds");
 #endif
